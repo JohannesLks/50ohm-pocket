@@ -203,11 +203,12 @@ class _LearningmoduleState extends State<Learningmodule> {
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
                             json.chapter_names(currentmainchapter),
                             style: Theme.of(context).textTheme.headlineSmall,
+                            textAlign: TextAlign.center,
                           ),
                           if (totalQuestions > 0) ...[
                             SizedBox(height: 8),
