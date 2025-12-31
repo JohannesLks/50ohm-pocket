@@ -74,16 +74,45 @@ class Databaseobj{
   /// Returns a list of scores for ALL questions based on the provided question keys.
   /// Each key is [mainchapter, chapter, subchapter, questionIndex].
   /// Unanswered questions get score 0.
+  /// Returns a list of scores for ALL questions based on the provided question keys.
+  /// Each key is [mainchapter, chapter, subchapter, questionIndex].
+  /// Unanswered questions get score 0.
+  /// Optimized to batch database reads per subchapter.
   List<int> getAllQuestionScoresFromKeys(List<List<int>> questionKeys) {
     List<int> allScores = [];
     
-    for (var key in questionKeys) {
-      int mainchapter = key[0];
-      int chapter = key[1];
-      int? subchapter = key[2] == -1 ? null : key[2];
-      int questionIndex = key[3];
+    // Cache variables to prevent redundant Hive access
+    // This reduces DB hits from O(Questions) to O(Subchapters)
+    String? lastDbKey;
+    List<dynamic>? cachedScores;
+    
+    for (var keyInfo in questionKeys) {
+      int mainchapter = keyInfo[0];
+      int chapter = keyInfo[1];
+      int? subchapter = keyInfo[2] == -1 ? null : keyInfo[2];
+      int questionIndex = keyInfo[3];
       
-      int score = getQuestionScore(mainchapter, chapter, subchapter, questionIndex);
+      // Construct the key for the current question's group
+      String currentDbKey = subchapter == null 
+          ? "[$mainchapter][$chapter]" 
+          : "[$mainchapter][$chapter][$subchapter]";
+      
+      // Only fetch from database if we are looking at a new group (chapter/subchapter)
+      if (currentDbKey != lastDbKey) {
+        lastDbKey = currentDbKey;
+        try {
+          cachedScores = DatabaseWidget.of(context).prog_database.get(currentDbKey);
+        } catch (e) {
+          cachedScores = null;
+        }
+      }
+      
+      // Get score from the cached list
+      int score = 0;
+      if (cachedScores != null && questionIndex < cachedScores.length) {
+        score = (cachedScores[questionIndex] as int?) ?? 0;
+      }
+      
       allScores.add(score);
     }
     

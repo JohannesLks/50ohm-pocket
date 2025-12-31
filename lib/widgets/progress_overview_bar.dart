@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
 
-/// A widget that displays a horizontal bar where each vertical stripe
-/// represents a question, color-coded by learning progress score.
-class ProgressOverviewBar extends StatelessWidget {
+/// A widget that displays progress as a grid of colored squares,
+/// where each square represents a question.
+/// More scalable than a horizontal bar for large question counts (1000+).
+class ProgressPixelGrid extends StatelessWidget {
   /// List of scores for each question.
   /// Score meaning: 0 = not answered/wrong, 1 = 1x correct, 2 = 2x correct, 3+ = learned
   final List<int> questionScores;
   
-  /// Height of the progress bar
-  final double height;
+  /// Size of each square in dp
+  final double squareSize;
   
-  const ProgressOverviewBar({
+  /// Gap between squares in dp
+  final double gap;
+  
+  const ProgressPixelGrid({
     Key? key,
     required this.questionScores,
-    this.height = 24.0,
+    this.squareSize = 6.0,
+    this.gap = 1.0,
   }) : super(key: key);
 
   @override
@@ -22,60 +27,78 @@ class ProgressOverviewBar extends StatelessWidget {
       return SizedBox.shrink();
     }
     
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4.0),
-        border: Border.all(
-          color: Theme.of(context).dividerColor,
-          width: 1.0,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: CustomPaint(
-        size: Size(double.infinity, height),
-        painter: _ProgressBarPainter(
-          scores: questionScores,
-          isDarkMode: Theme.of(context).brightness == Brightness.dark,
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate how many columns fit in the available width
+        final double availableWidth = constraints.maxWidth;
+        final int columnsPerRow = ((availableWidth + gap) / (squareSize + gap)).floor();
+        final int totalRows = (questionScores.length / columnsPerRow).ceil();
+        final double gridHeight = totalRows * (squareSize + gap) - gap;
+        
+        return Container(
+          height: gridHeight,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4.0),
+          ),
+          child: CustomPaint(
+            size: Size(availableWidth, gridHeight),
+            painter: _ProgressGridPainter(
+              scores: questionScores,
+              squareSize: squareSize,
+              gap: gap,
+              columnsPerRow: columnsPerRow,
+              isDarkMode: Theme.of(context).brightness == Brightness.dark,
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
-class _ProgressBarPainter extends CustomPainter {
+class _ProgressGridPainter extends CustomPainter {
   final List<int> scores;
+  final double squareSize;
+  final double gap;
+  final int columnsPerRow;
   final bool isDarkMode;
 
-  _ProgressBarPainter({
+  _ProgressGridPainter({
     required this.scores,
+    required this.squareSize,
+    required this.gap,
+    required this.columnsPerRow,
     required this.isDarkMode,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (scores.isEmpty) return;
+    if (scores.isEmpty || columnsPerRow == 0) return;
 
-    final double stripeWidth = size.width / scores.length;
     final Paint paint = Paint()..style = PaintingStyle.fill;
 
     for (int i = 0; i < scores.length; i++) {
+      final int row = i ~/ columnsPerRow;
+      final int col = i % columnsPerRow;
+      
+      final double x = col * (squareSize + gap);
+      final double y = row * (squareSize + gap);
+      
       paint.color = _getColorForScore(scores[i]);
       
-      final Rect rect = Rect.fromLTWH(
-        i * stripeWidth,
-        0,
-        stripeWidth + 0.5, // Slight overlap to prevent gaps
-        size.height,
+      final Rect rect = Rect.fromLTWH(x, y, squareSize, squareSize);
+      final RRect roundedRect = RRect.fromRectAndRadius(
+        rect,
+        Radius.circular(1.0),
       );
       
-      canvas.drawRect(rect, paint);
+      canvas.drawRRect(roundedRect, paint);
     }
   }
 
   Color _getColorForScore(int score) {
     if (score <= 0) {
-      // Not answered or wrong - gray/red
+      // Not answered or wrong - gray
       return isDarkMode 
           ? Colors.grey.shade700 
           : Colors.grey.shade400;
@@ -98,8 +121,10 @@ class _ProgressBarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ProgressBarPainter oldDelegate) {
-    return oldDelegate.scores != scores || oldDelegate.isDarkMode != isDarkMode;
+  bool shouldRepaint(covariant _ProgressGridPainter oldDelegate) {
+    return oldDelegate.scores != scores || 
+           oldDelegate.isDarkMode != isDarkMode ||
+           oldDelegate.columnsPerRow != columnsPerRow;
   }
 }
 
@@ -147,9 +172,8 @@ class ProgressOverviewCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: 8),
-            ProgressOverviewBar(
+            ProgressPixelGrid(
               questionScores: questionScores,
-              height: 20,
             ),
             SizedBox(height: 8),
             Row(
